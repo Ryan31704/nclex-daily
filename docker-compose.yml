@@ -1,0 +1,21 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: nclex-daily-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: nclex_daily
+      POSTGRES_USER: nclex
+      POSTGRES_PASSWORD: nclex_local_password
+    ports:
+      - "5432:5432"
+    volumes:
+      - nclex_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U nclex -d nclex_daily"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  nclex_postgres_data:
