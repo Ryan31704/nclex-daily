@@ -1,6 +1,6 @@
 # NCLEX Daily
 
-NCLEX Daily is a mobile-first study application for short, motivating daily NCLEX practice. The repository currently contains **Phase 1: Foundation** and **Phase 2: Authentication**: a FastAPI API, PostgreSQL/SQLAlchemy/Alembic plumbing, Supabase email/password authentication, protected React routing, and automatic profile provisioning.
+NCLEX Daily is a mobile-first study application for short, motivating daily NCLEX practice. The repository currently contains **Phase 1: Foundation**, **Phase 2: Authentication**, and **Phase 3: Question Bank**: a FastAPI API, PostgreSQL/SQLAlchemy/Alembic plumbing, Supabase email/password authentication, protected React routing, automatic profile provisioning, and a normalized private question bank.
 
 ## Architecture
 
@@ -48,13 +48,20 @@ The frontend reads its API origin from `VITE_API_URL`. The backend exposes versi
    alembic upgrade head
    ```
 
-6. Start the backend:
+6. Validate and import the private question bank (the command is safe to rerun):
+
+   ```powershell
+   python -m app.scripts.import_questions ..\data\original_nclex_study_question_bank_1700.csv
+   python -m app.scripts.verify_question_bank --expect-child-topics 125
+   ```
+
+7. Start the backend:
 
    ```powershell
    uvicorn app.main:app --reload
    ```
 
-7. In a second terminal, start the frontend:
+8. In a second terminal, start the frontend:
 
    ```powershell
    cd frontend
@@ -142,9 +149,23 @@ Calling Supabase Auth for token validation adds one regional network request to 
 
 Exact deployment and production-hardening instructions will be completed in Phase 6.
 
+## Question bank import
+
+The original private source is preserved at `data/original_nclex_study_question_bank_1700.csv`. The importer validates every required field, the `A - answer text` through `D - answer text` answer format, and an exact match between the answer text and its referenced choice. Invalid input is rejected before database changes and produces a CSV error report with the source row, error type, question text, and reason.
+
+The source generates a two-level hierarchy: `chapter` values are parent topics and `topic` values are child topics. Each question is assigned to a child topic, has four ordered choices and one correct choice, and receives a deterministic unique content hash. Re-running the importer skips existing questions instead of duplicating them.
+
+The supplied source contains 17 unique chapters and 125 unique chapter/topic pairs. This differs from the preliminary specification's estimate of 133 child topics; no topics are invented or hard-coded to mask that source-data discrepancy.
+
+Authenticated API routes:
+
+- `GET /api/v1/topics`: hierarchical topic list with question counts
+- `GET /api/v1/topics/{topic_id}`: topic detail and hierarchy context
+- `GET /api/v1/questions/{question_id}`: development-only review response; choice correctness is intentionally excluded
+
 ## Current MVP limitations
 
-Phase 2 includes authentication and the Profile model. Topic/question models, seed data, question import, quiz behavior, progress tracking, and final production deployment configuration remain for Phases 3–6.
+Phase 3 includes the normalized private question bank and read-only review APIs. Quiz behavior, progress tracking, rationales, difficulty review, and final production deployment configuration remain for Phases 4–6.
 
 ## Phase 2 manual test checklist
 
@@ -159,4 +180,6 @@ Phase 2 includes authentication and the Profile model. Topic/question models, se
 
 ## Content Licensing
 
-Only original, user-owned, public-domain, or properly licensed question content should be distributed through this application. Commercial NCLEX prep questions and rationales must not be copied, lightly paraphrased, scraped, or imported without appropriate distribution rights. Future question records and imports will include provenance and license metadata for auditability.
+Only original, user-owned, public-domain, or properly licensed question content should be distributed through this application. Commercial NCLEX prep questions and rationales must not be copied, lightly paraphrased, scraped, or imported without appropriate distribution rights.
+
+The Phase 3 CSV is treated as private review material. Imported rows are marked `source_type=imported_private`, preserve the exact source filename, and use `license_status=review_required`; rationales and difficulty remain unset. Do not expose, redistribute, or deploy this content publicly until ownership and distribution rights are reviewed and recorded. The backend enables Row Level Security without direct browser policies, and question data is served only through authenticated FastAPI routes.
