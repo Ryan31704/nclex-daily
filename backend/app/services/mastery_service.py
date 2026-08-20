@@ -10,31 +10,31 @@ from app.models.attempt import Attempt
 from app.models.question import Question
 from app.models.topic_progress import TopicProgress
 
-RECENT_ATTEMPT_LIMIT = 20
-
-
 @dataclass(frozen=True)
 class MasteryAttempt:
     is_correct: bool
-    difficulty: str | None = None
 
 
-def calculate_mastery(attempts: Sequence[MasteryAttempt]) -> float:
-    """Return a 0-100 score with recent outcomes weighted most heavily."""
-    recent = list(attempts)[-RECENT_ATTEMPT_LIMIT:]
-    if not recent:
+def calculate_mastery(
+    latest_question_attempts: Sequence[MasteryAttempt],
+    *,
+    total_question_count: int,
+) -> float:
+    """Return the percentage of the active question pool answered correctly.
+
+    Callers provide only the latest attempt for each unique question. Unseen
+    questions contribute zero, and repeating one question cannot inflate the
+    score.
+    """
+    if total_question_count <= 0:
         return 0.0
-
-    weighted_signal = 0.0
-    total_weight = 0.0
-    difficulty_weights = {"easy": 0.9, "medium": 1.0, "hard": 1.1}
-    for recency, attempt in enumerate(recent, start=1):
-        weight = recency * difficulty_weights.get(attempt.difficulty or "medium", 1.0)
-        weighted_signal += weight if attempt.is_correct else -weight
-        total_weight += weight
-
-    normalized = ((weighted_signal / total_weight) + 1.0) * 50.0
-    return round(max(0.0, min(100.0, normalized)), 1)
+    correct_question_count = sum(
+        1 for attempt in latest_question_attempts if attempt.is_correct
+    )
+    return round(
+        max(0.0, min(100.0, (correct_question_count / total_question_count) * 100)),
+        1,
+    )
 
 
 def classify_mastery(score: float) -> str:
@@ -42,7 +42,7 @@ def classify_mastery(score: float) -> str:
         return "weak"
     if score < 70:
         return "developing"
-    if score < 85:
+    if score < 100:
         return "strong"
     return "mastered"
 
@@ -54,17 +54,28 @@ def update_topic_progress(
     topic_id: uuid.UUID,
     practiced_at: datetime,
 ) -> TopicProgress:
-    recent_rows = db.execute(
-        select(Attempt.is_correct, Question.difficulty)
+    attempt_rows = db.execute(
+        select(Attempt.question_id, Attempt.is_correct)
         .join(Question, Question.id == Attempt.question_id)
-        .where(Attempt.user_id == user_id, Question.topic_id == topic_id)
-        .order_by(Attempt.answered_at.desc())
-        .limit(RECENT_ATTEMPT_LIMIT)
+        .where(
+            Attempt.user_id == user_id,
+            Question.topic_id == topic_id,
+            Question.is_active.is_(True),
+        )
+        .order_by(Attempt.answered_at.desc(), Attempt.id.desc())
     ).all()
-    recent_attempts = [
-        MasteryAttempt(is_correct=is_correct, difficulty=difficulty)
-        for is_correct, difficulty in reversed(recent_rows)
-    ]
+    latest_by_question: dict[uuid.UUID, MasteryAttempt] = {}
+    for question_id, is_correct in attempt_rows:
+        latest_by_question.setdefault(
+            question_id,
+            MasteryAttempt(is_correct=is_correct),
+        )
+    total_question_count = db.scalar(
+        select(func.count(Question.id)).where(
+            Question.topic_id == topic_id,
+            Question.is_active.is_(True),
+        )
+    )
     attempted_count, correct_count = db.execute(
         select(
             func.count(Attempt.id),
@@ -86,7 +97,10 @@ def update_topic_progress(
 
     progress.attempted_questions = int(attempted_count or 0)
     progress.correct_questions = int(correct_count or 0)
-    progress.mastery_score = calculate_mastery(recent_attempts)
+    progress.mastery_score = calculate_mastery(
+        list(latest_by_question.values()),
+        total_question_count=int(total_question_count or 0),
+    )
     progress.last_practiced_at = practiced_at
     db.flush()
     return progress

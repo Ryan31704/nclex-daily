@@ -4,6 +4,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { RouterProvider } from 'react-router-dom'
 
 import { AuthProvider } from './features/auth/AuthProvider'
+import { PwaStatus } from './components/PwaStatus'
 import { router } from './routes/router'
 import './index.css'
 
@@ -20,7 +21,8 @@ createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <QueryClientProvider client={queryClient}>
       <AuthProvider>
-        <RouterProvider future={{ v7_startTransition: true }} router={router} />
+        <RouterProvider router={router} />
+        <PwaStatus />
       </AuthProvider>
     </QueryClientProvider>
   </StrictMode>,

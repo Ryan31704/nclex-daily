@@ -11,6 +11,7 @@ from app.models.question import Question
 from app.models.topic import Topic
 from app.services.question_import_service import import_question_csv, parse_question_csv
 from app.services.question_bank_verification import collect_question_bank_metrics
+from app.scripts.activate_question_bank import activate_question_hashes
 
 HEADERS = (
     "question",
@@ -144,3 +145,58 @@ def test_builds_hierarchy_and_reimport_is_idempotent(
     assert metrics.questions_without_topic == 0
     assert metrics.questions_assigned_to_parent_topic == 0
     assert metrics.orphan_child_topics == 0
+
+
+def test_can_preview_and_reversibly_activate_a_question_set(
+    tmp_path: Path,
+    database: Session,
+) -> None:
+    first_csv = _write_csv(
+        tmp_path / "first.csv",
+        [_valid_row(question="Question one")],
+    )
+    second_csv = _write_csv(
+        tmp_path / "second.csv",
+        [
+            _valid_row(
+                question="Question two",
+                chapter="Chapter 2: Pharmacology",
+                topic="Medication Safety",
+            )
+        ],
+    )
+    first_parsed, _, _ = parse_question_csv(first_csv)
+    second_parsed, _, _ = parse_question_csv(second_csv)
+    import_question_csv(database, first_csv)
+    import_question_csv(database, second_csv)
+
+    matched, missing, active_before = activate_question_hashes(
+        database,
+        {second_parsed[0].content_hash},
+        apply=False,
+    )
+    assert (matched, missing, active_before) == (1, 0, 2)
+
+    activate_question_hashes(
+        database,
+        {second_parsed[0].content_hash},
+        apply=True,
+    )
+    active_questions = set(
+        database.scalars(
+            select(Question.content_hash).where(Question.is_active.is_(True))
+        ).all()
+    )
+    assert active_questions == {second_parsed[0].content_hash}
+
+    activate_question_hashes(
+        database,
+        {first_parsed[0].content_hash},
+        apply=True,
+    )
+    restored_questions = set(
+        database.scalars(
+            select(Question.content_hash).where(Question.is_active.is_(True))
+        ).all()
+    )
+    assert restored_questions == {first_parsed[0].content_hash}

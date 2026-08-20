@@ -83,17 +83,29 @@ def _question(database: Session, topic: Topic, label: str) -> Question:
     return question
 
 
-def test_recent_mastery_outweighs_old_performance_and_classifies() -> None:
-    improving = [MasteryAttempt(False)] * 10 + [MasteryAttempt(True)] * 10
-    declining = [MasteryAttempt(True)] * 10 + [MasteryAttempt(False)] * 10
-
-    assert calculate_mastery(improving) > calculate_mastery(declining)
-    assert calculate_mastery([MasteryAttempt(False)] * 20) == 0.0
-    assert calculate_mastery([MasteryAttempt(True)] * 20) == 100.0
+def test_mastery_measures_correct_unique_question_coverage() -> None:
+    assert calculate_mastery([], total_question_count=100) == 0.0
+    assert calculate_mastery(
+        [MasteryAttempt(True)] * 2,
+        total_question_count=100,
+    ) == 2.0
+    assert calculate_mastery(
+        [MasteryAttempt(True)] * 5,
+        total_question_count=100,
+    ) == 5.0
+    assert calculate_mastery(
+        [MasteryAttempt(True)] * 85 + [MasteryAttempt(False)] * 15,
+        total_question_count=100,
+    ) == 85.0
+    assert calculate_mastery(
+        [MasteryAttempt(True)] * 100,
+        total_question_count=100,
+    ) == 100.0
     assert classify_mastery(39.9) == "weak"
     assert classify_mastery(40) == "developing"
     assert classify_mastery(70) == "strong"
-    assert classify_mastery(85) == "mastered"
+    assert classify_mastery(99.9) == "strong"
+    assert classify_mastery(100) == "mastered"
 
 
 def test_daily_selection_uses_weak_developing_strong_unseen_mix(
@@ -148,6 +160,14 @@ def test_daily_selection_uses_weak_developing_strong_unseen_mix(
     assert sum(
         selected_topic_ids.count(topics[name].id) for name in ("strong", "unseen")
     ) == 2
+
+    quick_review = DailyPracticeService(database, profile).generate_quick_review_session()
+    random_test = DailyPracticeService(database, profile).generate_random_session(20)
+    assert quick_review.practice_type == "quick_review"
+    assert quick_review.target_question_count == 10
+    assert random_test.practice_type == "random"
+    assert random_test.target_question_count == 20
+    assert len({item.question_id for item in random_test.session_questions}) == 20
 
 
 def test_answer_scoring_is_server_side_and_cannot_award_duplicate_xp(
@@ -358,6 +378,15 @@ def test_practice_api_hides_correctness_scores_and_checks_ownership(
         "is_correct" not in choice
         for choice in review_response.json()[0]["question"]["choices"]
     )
+    review_start_response = client.post(
+        f"/api/v1/practice/review/{question_payload['id']}/start",
+        json={},
+    )
+    assert review_start_response.status_code == 200
+    assert (
+        review_start_response.json()["questions"][0]["question"]["id"]
+        == question_payload["id"]
+    )
 
     other_auth_user = AuthenticatedUser(
         id=uuid.uuid4(),
@@ -378,6 +407,8 @@ def test_practice_api_hides_correctness_scores_and_checks_ownership(
 def test_quiz_engine_routes_require_authentication() -> None:
     with TestClient(app) as client:
         assert client.post("/api/v1/practice/daily/start", json={}).status_code == 401
+        assert client.post("/api/v1/practice/quick-review/start", json={}).status_code == 401
+        assert client.post("/api/v1/practice/random/start", json={}).status_code == 401
         assert client.get("/api/v1/progress").status_code == 401
         assert client.get("/api/v1/review/missed").status_code == 401
         assert client.get("/api/v1/dashboard").status_code == 401

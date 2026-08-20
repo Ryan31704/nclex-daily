@@ -10,6 +10,7 @@ from app.schemas.auth import AuthenticatedUser
 from app.schemas.practice import (
     CompleteSessionResponse,
     PracticeSessionResponse,
+    RandomPracticeRequest,
     StartPracticeRequest,
     SubmitAnswerRequest,
     SubmitAnswerResponse,
@@ -44,6 +45,39 @@ def start_daily_practice(
     return serialize_session(loaded)
 
 
+@router.post("/quick-review/start", response_model=PracticeSessionResponse)
+def start_quick_review(
+    current_user: AuthenticatedUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> PracticeSessionResponse:
+    profile = get_or_create_profile(db, current_user)
+    service = DailyPracticeService(db, profile)
+    try:
+        session = service.generate_quick_review_session()
+    except EmptyQuestionBank as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+    loaded = get_session_for_user(db, session_id=session.id, user_id=profile.id)
+    assert loaded is not None
+    return serialize_session(loaded)
+
+
+@router.post("/random/start", response_model=PracticeSessionResponse)
+def start_random_test(
+    request: RandomPracticeRequest,
+    current_user: AuthenticatedUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> PracticeSessionResponse:
+    profile = get_or_create_profile(db, current_user)
+    service = DailyPracticeService(db, profile)
+    try:
+        session = service.generate_random_session(request.target_question_count)
+    except EmptyQuestionBank as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+    loaded = get_session_for_user(db, session_id=session.id, user_id=profile.id)
+    assert loaded is not None
+    return serialize_session(loaded)
+
+
 @router.post("/topic/{topic_id}/start", response_model=PracticeSessionResponse)
 def start_topic_practice(
     topic_id: uuid.UUID,
@@ -61,6 +95,25 @@ def start_topic_practice(
     except PracticeNotFound as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
     except EmptyQuestionBank as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+    loaded = get_session_for_user(db, session_id=session.id, user_id=profile.id)
+    assert loaded is not None
+    return serialize_session(loaded)
+
+
+@router.post("/review/{question_id}/start", response_model=PracticeSessionResponse)
+def start_missed_question_review(
+    question_id: uuid.UUID,
+    current_user: AuthenticatedUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> PracticeSessionResponse:
+    profile = get_or_create_profile(db, current_user)
+    service = DailyPracticeService(db, profile)
+    try:
+        session = service.generate_review_session(question_id)
+    except PracticeNotFound as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    except PracticeConflict as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
     loaded = get_session_for_user(db, session_id=session.id, user_id=profile.id)
     assert loaded is not None

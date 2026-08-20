@@ -75,7 +75,8 @@ def collect_question_bank_metrics(db: Session) -> QuestionBankMetrics:
         .where(
             (Question.question_type != "multiple_choice")
             | (Question.source_type != "imported_private")
-            | (Question.source_reference != "original_nclex_study_question_bank_1700.csv")
+            | Question.source_reference.is_(None)
+            | (Question.source_reference == "")
             | (Question.license_status != "review_required")
             | Question.rationale.is_not(None)
             | Question.difficulty.is_not(None)

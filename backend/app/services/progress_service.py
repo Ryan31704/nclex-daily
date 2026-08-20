@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 from app.models.attempt import Attempt
 from app.models.daily_session import DailySession
 from app.models.profile import Profile
+from app.models.question import Question
 from app.models.topic import Topic
 from app.models.topic_progress import TopicProgress
 from app.repositories.practice import (
@@ -53,7 +54,17 @@ def get_topic_progress_response(
             )
         ).all()
     )
-    return _aggregate_topic_progress(topic, progress_rows)
+    question_counts = dict(
+        db.execute(
+            select(Question.topic_id, func.count(Question.id))
+            .where(
+                Question.topic_id.in_(topic_ids),
+                Question.is_active.is_(True),
+            )
+            .group_by(Question.topic_id)
+        ).all()
+    )
+    return _aggregate_topic_progress(topic, progress_rows, question_counts)
 
 
 def get_overall_progress(db: Session, profile: Profile) -> ProgressResponse:
@@ -73,10 +84,21 @@ def get_overall_progress(db: Session, profile: Profile) -> ProgressResponse:
             select(TopicProgress).where(TopicProgress.user_id == profile.id)
         ).all()
     }
+    question_counts = dict(
+        db.execute(
+            select(Question.topic_id, func.count(Question.id))
+            .where(
+                Question.topic_id.in_([topic.id for topic in topics]),
+                Question.is_active.is_(True),
+            )
+            .group_by(Question.topic_id)
+        ).all()
+    )
     topic_responses = [
         _aggregate_topic_progress(
             topic,
             [progress_by_topic[topic.id]] if topic.id in progress_by_topic else [],
+            question_counts,
         )
         for topic in topics
     ]
@@ -86,14 +108,17 @@ def get_overall_progress(db: Session, profile: Profile) -> ProgressResponse:
             func.sum(Attempt.is_correct.cast(Integer)),
         ).where(Attempt.user_id == profile.id)
     ).one()
-    attempted_total = sum(item.attempted_questions for item in topic_responses)
+    available_total = sum(question_counts.values())
     overall_mastery = (
         round(
-            sum(item.mastery_score * item.attempted_questions for item in topic_responses)
-            / attempted_total,
+            sum(
+                item.mastery_score * question_counts.get(item.topic.id, 0)
+                for item in topic_responses
+            )
+            / available_total,
             1,
         )
-        if attempted_total
+        if available_total
         else 0.0
     )
     return ProgressResponse(
@@ -183,16 +208,25 @@ def get_dashboard(db: Session, profile: Profile) -> DashboardResponse:
 def _aggregate_topic_progress(
     topic: Topic,
     progress_rows: list[TopicProgress],
+    question_counts: dict[uuid.UUID, int],
 ) -> TopicProgressResponse:
     attempted = sum(row.attempted_questions for row in progress_rows)
     correct = sum(row.correct_questions for row in progress_rows)
+    available = (
+        sum(question_counts.values())
+        if topic.parent_topic_id is None
+        else question_counts.get(topic.id, 0)
+    )
     mastery = (
         round(
-            sum(row.mastery_score * row.attempted_questions for row in progress_rows)
-            / attempted,
+            sum(
+                row.mastery_score * question_counts.get(row.topic_id, 0)
+                for row in progress_rows
+            )
+            / available,
             1,
         )
-        if attempted
+        if available
         else 0.0
     )
     practiced_dates = [

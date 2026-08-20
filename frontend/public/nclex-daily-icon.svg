@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title description">
+  <title id="title">NCLEX Daily</title>
+  <desc id="description">A white letter N and check mark on a teal app icon.</desc>
+  <rect width="512" height="512" rx="112" fill="#147c6f"/>
+  <circle cx="412" cy="104" r="76" fill="#1b9c89" opacity=".7"/>
+  <circle cx="96" cy="420" r="104" fill="#12645b" opacity=".75"/>
+  <rect x="112" y="104" width="288" height="304" rx="88" fill="#ffffff"/>
+  <path d="M176 330V190h38l84 86v-86h40v140h-36l-86-88v88h-40Z" fill="#18323a"/>
+  <path d="m274 359 28 28 62-68" fill="none" stroke="#1b9c89" stroke-linecap="round" stroke-linejoin="round" stroke-width="24"/>
+</svg>

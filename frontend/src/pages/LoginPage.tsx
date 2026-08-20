@@ -111,7 +111,7 @@ export function LoginPage() {
         <p className="text-sm text-slate-400">Built for focused nursing students.</p>
       </section>
 
-      <section className="flex items-center justify-center px-5 py-12 sm:px-10">
+      <section className="flex items-center justify-center px-5 pb-[max(3rem,env(safe-area-inset-bottom))] pt-[max(2rem,env(safe-area-inset-top))] sm:px-10 sm:py-12">
         <div className="w-full max-w-md">
           <Link className="text-xl font-extrabold tracking-tight text-ink lg:hidden" to="/">
             NCLEX <span className="text-teal-600">Daily</span>
@@ -138,7 +138,7 @@ export function LoginPage() {
             ))}
           </div>
 
-          <h1 className="mt-9 text-4xl font-bold tracking-tight text-ink">
+          <h1 className="mt-8 text-3xl font-bold tracking-tight text-ink sm:mt-9 sm:text-4xl">
             {mode === 'login' ? 'Welcome back' : 'Start your study streak'}
           </h1>
           <p className="mt-2 text-slate-600">

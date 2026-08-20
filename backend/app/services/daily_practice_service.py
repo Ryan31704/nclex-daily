@@ -1,4 +1,5 @@
 import uuid
+import random
 from collections.abc import Callable
 from datetime import UTC, date, datetime, timedelta
 
@@ -118,6 +119,38 @@ class DailyPracticeService:
             practice_type="topic",
             topic_id=topic.id,
         )
+
+    def generate_review_session(self, question_id: uuid.UUID) -> DailySession:
+        question = self.db.get(Question, question_id)
+        if question is None or not question.is_active:
+            raise PracticeNotFound("Question not found.")
+        latest_attempt = self.db.scalar(
+            select(Attempt)
+            .where(
+                Attempt.user_id == self.profile.id,
+                Attempt.question_id == question_id,
+            )
+            .order_by(Attempt.answered_at.desc())
+        )
+        if latest_attempt is None or latest_attempt.is_correct:
+            raise PracticeConflict("This question is not in your missed review list.")
+        return self._create_session(
+            [question],
+            practice_type="topic",
+            topic_id=question.topic_id,
+        )
+
+    def generate_quick_review_session(self) -> DailySession:
+        selected = self.select_questions(target_question_count=10)
+        return self._create_session(selected, practice_type="quick_review")
+
+    def generate_random_session(self, target_question_count: int) -> DailySession:
+        candidates = list_active_questions(self.db)
+        if not candidates:
+            raise EmptyQuestionBank("No active questions are available for this practice session.")
+        count = min(target_question_count, len(candidates))
+        selected = random.SystemRandom().sample(candidates, count)
+        return self._create_session(selected, practice_type="random")
 
     def select_questions(
         self,

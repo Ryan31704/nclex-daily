@@ -10,6 +10,10 @@ class StartPracticeRequest(BaseModel):
     target_question_count: int = Field(default=10, ge=1, le=50)
 
 
+class RandomPracticeRequest(BaseModel):
+    target_question_count: int = Field(default=10, ge=10, le=50)
+
+
 class PracticeQuestion(BaseModel):
     id: uuid.UUID
     question_text: str

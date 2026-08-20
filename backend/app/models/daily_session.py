@@ -16,7 +16,7 @@ class DailySession(Base):
             name="ck_daily_sessions_status",
         ),
         CheckConstraint(
-            "practice_type IN ('daily', 'topic')",
+            "practice_type IN ('daily', 'topic', 'quick_review', 'random')",
             name="ck_daily_sessions_practice_type",
         ),
         CheckConstraint(

@@ -1,104 +1,236 @@
-import { useState } from 'react'
-import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { useNavigate } from 'react-router-dom'
+import { useMemo } from 'react'
+import { useMutation, useQuery } from '@tanstack/react-query'
+import { Link, useNavigate } from 'react-router-dom'
 
-import { getMyProfile } from '../api/profile'
+import {
+  getDashboard,
+  getProgress,
+  getTopics,
+  startDailyPractice,
+  startQuickReview,
+} from '../api/practice'
+import { EmptyState } from '../components/EmptyState'
+import { ErrorNotice } from '../components/ErrorNotice'
+import { LoadingSkeleton } from '../components/LoadingSkeleton'
+import { PageHeader } from '../components/PageHeader'
+import { ProgressBar } from '../components/ProgressBar'
+import { StatCard } from '../components/StatCard'
+import { StreakBadge } from '../components/StreakBadge'
+import { TopicProgressCard } from '../components/TopicProgressCard'
+import { XpBadge } from '../components/XpBadge'
 import { useAuth } from '../features/auth/useAuth'
+import { buildCategoryProgress } from '../utils/progress'
+
+function greetingForCurrentTime(): string {
+  const hour = new Date().getHours()
+  if (hour < 12) return 'Good morning'
+  if (hour < 18) return 'Good afternoon'
+  return 'Good evening'
+}
 
 export function DashboardPage() {
-  const { session, user, signOut } = useAuth()
-  const [logoutError, setLogoutError] = useState<string | null>(null)
-  const [loggingOut, setLoggingOut] = useState(false)
-  const navigate = useNavigate()
-  const queryClient = useQueryClient()
+  const { session, user } = useAuth()
   const accessToken = session?.access_token
+  const navigate = useNavigate()
 
-  const profile = useQuery({
-    queryKey: ['me', user?.id],
-    queryFn: ({ signal }) => getMyProfile(accessToken!, signal),
+  const dashboard = useQuery({
+    queryKey: ['dashboard', user?.id],
+    queryFn: ({ signal }) => getDashboard(accessToken!, signal),
     enabled: Boolean(accessToken),
   })
+  const topics = useQuery({
+    queryKey: ['topics'],
+    queryFn: ({ signal }) => getTopics(accessToken!, signal),
+    enabled: Boolean(accessToken),
+  })
+  const progress = useQuery({
+    queryKey: ['progress', user?.id],
+    queryFn: ({ signal }) => getProgress(accessToken!, signal),
+    enabled: Boolean(accessToken),
+  })
+  const openPracticeSession = (practiceSession: {
+    id: string
+    status: string
+  }) => {
+    navigate(
+      practiceSession.status === 'completed'
+        ? `/practice/${practiceSession.id}/complete`
+        : `/practice/${practiceSession.id}`,
+    )
+  }
+  const startSession = useMutation({
+    mutationFn: () => startDailyPractice(accessToken!),
+    onSuccess: openPracticeSession,
+  })
+  const quickReview = useMutation({
+    mutationFn: () => startQuickReview(accessToken!),
+    onSuccess: openPracticeSession,
+  })
 
-  const handleLogOut = async () => {
-    setLoggingOut(true)
-    setLogoutError(null)
-    try {
-      const error = await signOut()
-      if (error) {
-        setLogoutError(error.message)
-        return
-      }
-      queryClient.clear()
-      navigate('/login', { replace: true })
-    } catch (error) {
-      setLogoutError(error instanceof Error ? error.message : 'Unable to log out.')
-    } finally {
-      setLoggingOut(false)
-    }
+  const categoryProgress = useMemo(
+    () => buildCategoryProgress(topics.data ?? [], progress.data?.topics ?? []),
+    [progress.data?.topics, topics.data],
+  )
+  const dailySession = dashboard.data?.daily_session
+  const ctaLabel =
+    dailySession?.status === 'completed'
+      ? 'START A QUICK REVIEW'
+      : dailySession?.questions_completed
+        ? 'CONTINUE TODAY’S PRACTICE'
+        : 'START TODAY’S PRACTICE'
+
+  if (dashboard.isPending || topics.isPending || progress.isPending) {
+    return (
+      <div className="mx-auto max-w-7xl px-5 py-8 sm:px-8 lg:py-10">
+        <LoadingSkeleton rows={4} />
+      </div>
+    )
   }
 
-  const displayName = profile.data?.display_name ?? user?.email?.split('@')[0] ?? 'Student'
+  const firstError = dashboard.error ?? topics.error ?? progress.error
+  if (firstError) {
+    return (
+      <div className="mx-auto max-w-7xl px-5 py-8 sm:px-8 lg:py-10">
+        <ErrorNotice
+          message={firstError.message}
+          onRetry={() => {
+            void Promise.all([dashboard.refetch(), topics.refetch(), progress.refetch()])
+          }}
+        />
+      </div>
+    )
+  }
+
+  const data = dashboard.data!
+  const progressData = progress.data!
+  const accuracy = progressData.questions_answered
+    ? Math.round((progressData.correct_questions / progressData.questions_answered) * 100)
+    : 0
 
   return (
-    <main className="min-h-screen bg-canvas">
-      <header className="border-b border-slate-200 bg-white px-5 py-4 sm:px-8">
-        <div className="mx-auto flex max-w-6xl items-center justify-between gap-4">
-          <span className="text-xl font-extrabold tracking-tight text-ink">
-            NCLEX <span className="text-teal-600">Daily</span>
-          </span>
-          <button
-            className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-bold text-ink transition hover:border-teal-500 disabled:opacity-60"
-            disabled={loggingOut}
-            onClick={handleLogOut}
-            type="button"
-          >
-            {loggingOut ? 'Logging out…' : 'Log Out'}
-          </button>
-        </div>
-      </header>
-
-      <section className="mx-auto max-w-6xl px-5 py-10 sm:px-8 sm:py-14">
-        <p className="font-semibold text-teal-700">Authentication connected</p>
-        <h1 className="mt-2 text-4xl font-bold tracking-tight text-ink sm:text-5xl">
-          Welcome, {displayName}
-        </h1>
-        <p className="mt-3 text-lg text-slate-600">
-          Your secure study dashboard is ready for the quiz engine in the next phases.
-        </p>
-
-        {profile.isPending ? (
-          <div className="mt-10 h-56 animate-pulse rounded-3xl bg-slate-200" aria-label="Loading profile" />
-        ) : null}
-        {profile.isError ? (
-          <div className="mt-10 rounded-2xl border border-red-200 bg-red-50 p-5 text-red-800" role="alert">
-            <p className="font-bold">We could not load your backend profile.</p>
-            <p className="mt-1 text-sm">{profile.error.message}</p>
+    <div className="mx-auto max-w-7xl px-5 py-8 sm:px-8 lg:py-10">
+      <PageHeader
+        action={
+          <div className="flex flex-wrap gap-2">
+            <StreakBadge days={data.current_streak} />
+            <XpBadge xp={data.total_xp} />
           </div>
-        ) : null}
-        {profile.data ? (
-          <div className="mt-10 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            <article className="rounded-3xl border border-slate-200 bg-white p-6 shadow-card sm:col-span-2">
-              <p className="text-sm font-semibold uppercase tracking-wider text-slate-500">Signed in as</p>
-              <p className="mt-3 break-all text-xl font-bold text-ink">{profile.data.email}</p>
-              <p className="mt-2 text-sm text-slate-500">Profile ID: {profile.data.id}</p>
-            </article>
-            <article className="rounded-3xl border border-slate-200 bg-white p-6 shadow-card">
-              <p className="text-sm font-semibold text-slate-500">Current streak</p>
-              <p className="mt-3 text-3xl font-bold text-ink">{profile.data.current_streak} days</p>
-            </article>
-            <article className="rounded-3xl border border-slate-200 bg-white p-6 shadow-card">
-              <p className="text-sm font-semibold text-slate-500">Total XP</p>
-              <p className="mt-3 text-3xl font-bold text-ink">{profile.data.total_xp}</p>
-            </article>
-          </div>
-        ) : null}
+        }
+        eyebrow="Your study home"
+        title={`${greetingForCurrentTime()}, ${data.display_name}`}
+      />
 
-        {logoutError ? (
-          <p className="mt-6 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-800" role="alert">
-            {logoutError}
-          </p>
-        ) : null}
+      <section className="mt-8 grid gap-4 sm:grid-cols-2 xl:grid-cols-4" aria-label="Study statistics">
+        <StatCard detail={`Best: ${data.longest_streak} days`} icon="🔥" label="Current streak" tone="coral" value={`${data.current_streak} days`} />
+        <StatCard icon="★" label="Total XP" tone="gold" value={data.total_xp.toLocaleString()} />
+        <StatCard icon="✓" label="Questions answered" tone="blue" value={data.questions_answered.toLocaleString()} />
+        <StatCard detail={`${accuracy}% accuracy`} icon="↗" label="Overall mastery" value={`${Math.round(data.overall_mastery)}%`} />
       </section>
-    </main>
+
+      <section className="relative mt-6 overflow-hidden rounded-[2rem] bg-ink p-6 text-white shadow-xl shadow-slate-900/10 sm:p-8">
+        <div aria-hidden="true" className="absolute -right-12 -top-16 h-52 w-52 rounded-full bg-teal-500/20 blur-2xl" />
+        <div className="relative max-w-2xl">
+          <p className="text-xs font-bold uppercase tracking-[0.18em] text-teal-100">
+            {dailySession?.status === 'completed' ? 'Daily goal complete' : 'Today’s practice'}
+          </p>
+          <h2 className="mt-3 text-3xl font-extrabold tracking-tight">
+            {dailySession?.status === 'completed'
+              ? 'You showed up today. Nice work.'
+              : 'Ten focused questions. One stronger nurse.'}
+          </h2>
+          <p className="mt-3 max-w-xl leading-7 text-slate-300">
+            {dailySession
+              ? `${dailySession.questions_completed} of ${dailySession.target_question_count} questions completed.`
+              : 'Your session adapts toward weaker topics while keeping the whole exam in view.'}
+          </p>
+          {dailySession && dailySession.status !== 'completed' ? (
+            <div className="mt-5 max-w-md">
+              <ProgressBar
+                label="Daily practice completion"
+                value={(dailySession.questions_completed / dailySession.target_question_count) * 100}
+              />
+            </div>
+          ) : null}
+          <div className="mt-7 flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
+            <button
+              className="min-h-12 w-full rounded-2xl bg-teal-500 px-6 py-3 font-extrabold text-white shadow-lg shadow-teal-950/30 transition hover:bg-teal-400 disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
+              disabled={startSession.isPending || quickReview.isPending}
+              onClick={() =>
+                dailySession?.status === 'completed'
+                  ? quickReview.mutate()
+                  : startSession.mutate()
+              }
+              type="button"
+            >
+              {startSession.isPending || quickReview.isPending ? 'PREPARING…' : ctaLabel}
+            </button>
+            {dailySession?.status === 'completed' ? (
+              <Link
+                className="inline-flex min-h-12 w-full items-center justify-center rounded-2xl px-4 font-bold text-teal-100 hover:bg-white/10 sm:w-auto"
+                to={`/practice/${dailySession.id}/complete`}
+              >
+                View today’s results
+              </Link>
+            ) : null}
+            <span className="text-center text-sm font-semibold text-slate-400 sm:text-left">About 10 minutes</span>
+          </div>
+          {startSession.isError || quickReview.isError ? (
+            <p className="mt-4 text-sm font-semibold text-rose-200" role="alert">
+              {(startSession.error ?? quickReview.error)?.message}
+            </p>
+          ) : null}
+        </div>
+      </section>
+
+      <div className="mt-10 grid gap-8 xl:grid-cols-[0.8fr_1.2fr]">
+        <section>
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-xs font-bold uppercase tracking-[0.18em] text-teal-700">Focus next</p>
+              <h2 className="mt-2 text-2xl font-extrabold text-ink">Weakest topics</h2>
+            </div>
+            <Link className="text-sm font-bold text-teal-700" to="/progress">View all</Link>
+          </div>
+          <div className="mt-5 space-y-3">
+            {data.weakest_topics.length ? (
+              data.weakest_topics.map((item) => (
+                <Link
+                  key={item.topic.id}
+                  className="flex items-center justify-between gap-4 rounded-2xl border border-slate-200 bg-white p-4 transition hover:border-teal-300"
+                  to={`/topics/${item.topic.slug}`}
+                >
+                  <div>
+                    <p className="font-extrabold text-ink">{item.topic.name}</p>
+                    <p className="mt-1 text-sm text-slate-500">{item.attempted_questions} attempts · {item.classification}</p>
+                  </div>
+                  <span className="text-lg font-extrabold text-teal-700">{Math.round(item.mastery_score)}%</span>
+                </Link>
+              ))
+            ) : (
+              <EmptyState
+                description="Finish your first session and we’ll highlight the topics that deserve extra attention."
+                icon="◎"
+                title="Your focus list is waiting"
+              />
+            )}
+          </div>
+        </section>
+
+        <section>
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-xs font-bold uppercase tracking-[0.18em] text-teal-700">Roadmap</p>
+              <h2 className="mt-2 text-2xl font-extrabold text-ink">NCLEX progress</h2>
+            </div>
+            <Link className="text-sm font-bold text-teal-700" to="/progress">Explore roadmap</Link>
+          </div>
+          <div className="mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-1 2xl:grid-cols-2">
+            {categoryProgress.slice(0, 3).map((category) => (
+              <TopicProgressCard category={category} key={category.id} />
+            ))}
+          </div>
+        </section>
+      </div>
+    </div>
   )
 }

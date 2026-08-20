@@ -16,9 +16,11 @@ export class ApiError extends Error {
 interface ApiRequestOptions {
   accessToken?: string
   signal?: AbortSignal
+  method?: 'GET' | 'POST'
+  body?: unknown
 }
 
-export async function apiGet<T>(
+export async function apiRequest<T>(
   path: string,
   options: ApiRequestOptions = {},
 ): Promise<T> {
@@ -26,12 +28,15 @@ export async function apiGet<T>(
 
   try {
     response = await fetch(`${apiUrl}${path}`, {
+      method: options.method ?? 'GET',
       headers: {
         Accept: 'application/json',
+        ...(options.body !== undefined ? { 'Content-Type': 'application/json' } : {}),
         ...(options.accessToken
           ? { Authorization: `Bearer ${options.accessToken}` }
           : {}),
       },
+      body: options.body === undefined ? undefined : JSON.stringify(options.body),
       signal: options.signal,
     })
   } catch {
@@ -52,4 +57,19 @@ export async function apiGet<T>(
   }
 
   return response.json() as Promise<T>
+}
+
+export function apiGet<T>(
+  path: string,
+  options: Omit<ApiRequestOptions, 'method' | 'body'> = {},
+): Promise<T> {
+  return apiRequest<T>(path, options)
+}
+
+export function apiPost<T>(
+  path: string,
+  body: unknown,
+  options: Omit<ApiRequestOptions, 'method' | 'body'> = {},
+): Promise<T> {
+  return apiRequest<T>(path, { ...options, method: 'POST', body })
 }
