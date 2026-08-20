@@ -1,6 +1,6 @@
 # NCLEX Daily
 
-NCLEX Daily is a mobile-first study application for short, motivating daily NCLEX practice. The repository currently contains **Phase 1: Foundation**, **Phase 2: Authentication**, and **Phase 3: Question Bank**: a FastAPI API, PostgreSQL/SQLAlchemy/Alembic plumbing, Supabase email/password authentication, protected React routing, automatic profile provisioning, and a normalized private question bank.
+NCLEX Daily is a mobile-first study application for short, motivating daily NCLEX practice. The repository currently contains **Phases 1–4**: foundation, authentication, a normalized private question bank, and a secure backend quiz engine with daily/topic sessions, server-side scoring, XP, UTC streaks, and recent-weighted topic mastery.
 
 ## Architecture
 
@@ -163,9 +163,31 @@ Authenticated API routes:
 - `GET /api/v1/topics/{topic_id}`: topic detail and hierarchy context
 - `GET /api/v1/questions/{question_id}`: development-only review response; choice correctness is intentionally excluded
 
+## Quiz engine
+
+Phase 4 adds append-only attempts, ordered session membership, daily and topic practice sessions, and per-user topic progress. Correctness, XP, mastery, streaks, and resource ownership are calculated and enforced in FastAPI; the client supplies only the question and selected choice identifiers.
+
+Practice endpoints:
+
+- `POST /api/v1/practice/daily/start`
+- `POST /api/v1/practice/topic/{topic_id}/start`
+- `GET /api/v1/practice/sessions/{session_id}`
+- `POST /api/v1/practice/sessions/{session_id}/answer`
+- `POST /api/v1/practice/sessions/{session_id}/complete`
+- `GET /api/v1/topics/{topic_id}/progress`
+- `GET /api/v1/progress`
+- `GET /api/v1/review/missed`
+- `GET /api/v1/dashboard`
+
+Daily sessions target 10 questions and approximate a 50% weak, 30% developing, and 20% strong/unseen topic mix, with unseen and previously missed questions preferred. Correct answers earn 10 XP, incorrect answers earn 5 XP, and completion of a daily session adds 25 XP. Duplicate answer submissions and repeated completion calls cannot award XP twice.
+
+Mastery uses the latest 20 attempts per child topic. Recent attempts carry more weight, and difficulty can adjust the weight once reviewed difficulty values are available. Classifications are weak (0–39), developing (40–69), strong (70–84), and mastered (85–100).
+
+Streaks use UTC calendar dates consistently. Completing the first daily session on a UTC date records activity; repeated completions that day do not increase the streak again. Topic-only sessions do not count toward the daily streak.
+
 ## Current MVP limitations
 
-Phase 3 includes the normalized private question bank and read-only review APIs. Quiz behavior, progress tracking, rationales, difficulty review, and final production deployment configuration remain for Phases 4–6.
+Phase 4 includes the backend quiz engine and aggregate APIs. The polished dashboard, progress, topic, practice, feedback, session-complete, and review interfaces remain for Phase 5. Rationales and difficulty review for the imported private bank, plus final production deployment configuration, also remain.
 
 ## Phase 2 manual test checklist
 
