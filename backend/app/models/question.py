@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, String, Text, Uuid, func, text
+from sqlalchemy import JSON, Boolean, DateTime, ForeignKey, String, Text, Uuid, func, text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
@@ -41,6 +41,14 @@ class Question(Base):
         unique=True,
         index=True,
     )
+    external_id: Mapped[str | None] = mapped_column(
+        String(255), nullable=True, unique=True, index=True
+    )
+    interaction_data: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    answer_key: Mapped[dict | list | str | int | float | None] = mapped_column(
+        JSON, nullable=True
+    )
+    case_study_markdown: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     topic: Mapped["Topic"] = relationship("Topic", back_populates="questions")
     answer_choices: Mapped[list["AnswerChoice"]] = relationship(

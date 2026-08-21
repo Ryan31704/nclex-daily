@@ -95,14 +95,14 @@ export function submitPracticeAnswer(
   accessToken: string,
   sessionId: string,
   questionId: string,
-  answerChoiceId: string,
+  answer: unknown,
   responseTimeMs: number,
 ) {
   return apiPost<SubmitAnswerResponse>(
     `/api/v1/practice/sessions/${sessionId}/answer`,
     {
       question_id: questionId,
-      answer_choice_id: answerChoiceId,
+      answer,
       response_time_ms: responseTimeMs,
     },
     { accessToken },

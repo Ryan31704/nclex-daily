@@ -10,6 +10,7 @@ from app.models.answer_choice import AnswerChoice
 from app.models.question import Question
 from app.models.topic import Topic
 from app.services.question_import_service import import_question_csv, parse_question_csv
+from app.services.question_json_import_service import normalize_question_stem
 from app.services.question_bank_verification import collect_question_bank_metrics
 from app.scripts.activate_question_bank import activate_question_hashes
 
@@ -23,6 +24,21 @@ HEADERS = (
     "chapter",
     "topic",
 )
+
+
+def test_generated_stem_normalization_preserves_clinical_content() -> None:
+    assert normalize_question_stem(
+        "Clinical summary: A client reports chest pain. What should the nurse do first?"
+    ) == "A client reports chest pain. What should the nurse do first?"
+    assert normalize_question_stem(
+        "Handoff note: treatment includes chemotherapy. Which task can be delegated?"
+    ) == "Treatment includes chemotherapy. Which task can be delegated?"
+    assert normalize_question_stem(
+        "A preceptor presents a nursing question from Adult Health. Which response is appropriate?"
+    ) == "Which response is appropriate?"
+    assert normalize_question_stem(
+        "Using the generated case data, consider this additional detail: The client becomes confused. What should the nurse do?"
+    ) == "The client becomes confused. What should the nurse do?"
 
 
 @pytest.fixture

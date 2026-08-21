@@ -223,6 +223,14 @@ Exact deployment and production-hardening instructions will be completed in Phas
 
 ## Question bank import
 
+The currently active bank is the generated JSON set preserved at
+`data/nclex_generated_3x_alternative_question_bank.json`: 3,732 questions across 413
+leaf topics. It contains standard multiple choice plus multiple response,
+numeric response, ordered response, highlight, cloze, matching, matrix, and
+bow-tie questions. The app stores structured answer keys only in the backend and
+sends clients a sanitized interaction definition with all correctness fields
+removed.
+
 The original private source is preserved at `data/original_nclex_study_question_bank_1700.csv`. The importer validates every required field, the `A - answer text` through `D - answer text` answer format, and an exact match between the answer text and its referenced choice. Invalid input is rejected before database changes and produces a CSV error report with the source row, error type, question text, and reason.
 
 The source generates a two-level hierarchy: `chapter` values are parent topics and `topic` values are child topics. Each question is assigned to a child topic, has four ordered choices and one correct choice, and receives a deterministic unique content hash. Re-running the importer skips existing questions instead of duplicating them.
@@ -271,6 +279,45 @@ This keeps the current bank active and adds new unique questions.
 
 Adjust all expected values to match the new cumulative dataset. Re-importing the
 same file is idempotent and should report every question as skipped.
+
+### Validating and replacing the bank from generated JSON
+
+The JSON importer is the preferred path for a rich generated bank. It validates
+unique IDs, required content, topics, supported question types, option references,
+numeric answers, ordered answers, structured answer keys, and a maximum of 20
+top-level choices before opening a database transaction.
+
+First run a read-only validation from `backend/`:
+
+```powershell
+.\.venv\Scripts\python.exe -m app.scripts.import_question_json `
+  ..\data\nclex_generated_3x_alternative_question_bank.json
+```
+
+After backing up the database, import it and make it the only active bank:
+
+```powershell
+.\.venv\Scripts\python.exe -m alembic upgrade head
+.\.venv\Scripts\python.exe -m app.scripts.import_question_json `
+  ..\data\nclex_generated_3x_alternative_question_bank.json `
+  --apply --activate
+```
+
+The operation is idempotent: rerunning the same file skips existing rows. With
+`--activate`, it verifies that every source question exists before switching the
+active set, deactivates previous questions/topics, and abandons in-progress
+sessions so they cannot retain questions from the former bank. Completed
+sessions, attempts, XP, and progress history are preserved.
+
+Generated stems are normalized during JSON import so repeated wrappers such as
+`Clinical summary:`, `Handoff note:`, `Preceptor case:`, and generic planning
+introductions are not shown to learners. To clean an already-imported active
+bank, preview and then apply the same normalization:
+
+```powershell
+.\.venv\Scripts\python.exe -m app.scripts.normalize_question_stems
+.\.venv\Scripts\python.exe -m app.scripts.normalize_question_stems --apply
+```
 
 ### Switching completely to a new active question set
 
@@ -329,7 +376,7 @@ Authenticated API routes:
 
 ## Quiz engine
 
-Phase 4 adds append-only attempts, ordered session membership, daily and topic practice sessions, and per-user topic progress. Correctness, XP, mastery, streaks, and resource ownership are calculated and enforced in FastAPI; the client supplies only the question and selected choice identifiers.
+Phase 4 adds append-only attempts, ordered session membership, daily and topic practice sessions, and per-user topic progress. Correctness, XP, mastery, streaks, and resource ownership are calculated and enforced in FastAPI; the client supplies only its response, while the answer key remains server-side.
 
 Practice endpoints:
 

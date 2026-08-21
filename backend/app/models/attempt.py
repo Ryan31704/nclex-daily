@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 
-from sqlalchemy import Boolean, CheckConstraint, DateTime, ForeignKey, Index, Integer, UniqueConstraint, Uuid, func
+from sqlalchemy import JSON, Boolean, CheckConstraint, DateTime, ForeignKey, Index, Integer, UniqueConstraint, Uuid, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
@@ -40,10 +40,13 @@ class Attempt(Base):
         nullable=False,
         index=True,
     )
-    selected_answer_id: Mapped[uuid.UUID] = mapped_column(
+    selected_answer_id: Mapped[uuid.UUID | None] = mapped_column(
         Uuid,
         ForeignKey("answer_choices.id", ondelete="RESTRICT"),
-        nullable=False,
+        nullable=True,
+    )
+    answer_data: Mapped[dict | list | str | int | float | None] = mapped_column(
+        JSON, nullable=True
     )
     is_correct: Mapped[bool] = mapped_column(Boolean, nullable=False)
     answered_at: Mapped[datetime] = mapped_column(

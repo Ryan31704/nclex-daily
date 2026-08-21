@@ -7,12 +7,12 @@ import {
   getPracticeSession,
   submitPracticeAnswer,
 } from '../api/practice'
-import { AnswerChoiceButton } from '../components/AnswerChoiceButton'
 import { BrandLogo } from '../components/BrandLogo'
 import { ErrorNotice } from '../components/ErrorNotice'
 import { LoadingSkeleton } from '../components/LoadingSkeleton'
 import { ProgressBar } from '../components/ProgressBar'
 import { QuestionCard } from '../components/QuestionCard'
+import { QuestionInteraction } from '../components/QuestionInteraction'
 import { XpBadge } from '../components/XpBadge'
 import { useAuth } from '../features/auth/useAuth'
 import type { SubmitAnswerResponse } from '../types/practice'
@@ -24,7 +24,6 @@ export function PracticePage() {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null)
-  const [selectedChoiceId, setSelectedChoiceId] = useState<string | null>(null)
   const [feedback, setFeedback] = useState<SubmitAnswerResponse | null>(null)
   const questionStartedAt = useRef(Date.now())
   const feedbackPanel = useRef<HTMLElement | null>(null)
@@ -57,18 +56,17 @@ export function PracticePage() {
   }, [navigate, practiceSession.data?.status, sessionId])
 
   const submitAnswer = useMutation({
-    mutationFn: (answerChoiceId: string) =>
+    mutationFn: (answer: unknown) =>
       submitPracticeAnswer(
         accessToken!,
         sessionId,
         currentItem!.question.id,
-        answerChoiceId,
+        answer,
         Date.now() - questionStartedAt.current,
       ),
     onSuccess: (result) => {
       setFeedback(result)
     },
-    onError: () => setSelectedChoiceId(null),
   })
   const completeSession = useMutation({
     mutationFn: () => completePracticeSession(accessToken!, sessionId),
@@ -82,11 +80,10 @@ export function PracticePage() {
     },
   })
 
-  const chooseAnswer = (choiceId: string) => {
+  const chooseAnswer = (answer: unknown) => {
     if (submitAnswer.isPending || feedback) return
     setSelectedIndex(currentIndex)
-    setSelectedChoiceId(choiceId)
-    submitAnswer.mutate(choiceId)
+    submitAnswer.mutate(answer)
   }
 
   const continuePractice = () => {
@@ -97,7 +94,6 @@ export function PracticePage() {
       return
     }
     setSelectedIndex(currentIndex + 1)
-    setSelectedChoiceId(null)
     setFeedback(null)
   }
 
@@ -151,26 +147,8 @@ export function PracticePage() {
         </div>
 
         <div className="mt-7">
-          <QuestionCard question={currentItem.question.question_text} topic={currentItem.question.topic.name}>
-            {currentItem.question.choices.map((choice, index) => {
-              let state: 'idle' | 'selected' | 'correct' | 'incorrect' | 'muted' =
-                selectedChoiceId === choice.id ? 'selected' : 'idle'
-              if (feedback) {
-                if (feedback.correct_answer.id === choice.id) state = 'correct'
-                else if (selectedChoiceId === choice.id) state = 'incorrect'
-                else state = 'muted'
-              }
-              return (
-                <AnswerChoiceButton
-                  disabled={submitAnswer.isPending || Boolean(feedback)}
-                  key={choice.id}
-                  letter={String.fromCharCode(65 + index)}
-                  onSelect={() => chooseAnswer(choice.id)}
-                  state={state}
-                  text={choice.choice_text}
-                />
-              )
-            })}
+          <QuestionCard context={currentItem.question.case_study_markdown} question={currentItem.question.question_text} topic={currentItem.question.topic.name}>
+            <QuestionInteraction disabled={submitAnswer.isPending || Boolean(feedback)} feedback={feedback} key={currentItem.question.id} onSubmit={chooseAnswer} question={currentItem.question} />
           </QuestionCard>
         </div>
 
@@ -191,7 +169,7 @@ export function PracticePage() {
                   {feedback.is_correct ? 'Correct' : 'Not quite'}
                 </p>
                 {!feedback.is_correct ? (
-                  <p className="mt-1 text-sm font-semibold text-rose-700">Correct answer: {feedback.correct_answer.choice_text}</p>
+                  <p className="mt-1 text-sm font-semibold text-rose-700">Correct answer: {feedback.correct_answer_text}</p>
                 ) : null}
               </div>
               <XpBadge xp={feedback.xp_earned} />

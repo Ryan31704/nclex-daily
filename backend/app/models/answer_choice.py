@@ -15,7 +15,7 @@ class AnswerChoice(Base):
             name="uq_answer_choices_question_display_order",
         ),
         CheckConstraint(
-            "display_order >= 1 AND display_order <= 4",
+            "display_order >= 1 AND display_order <= 20",
             name="ck_answer_choices_display_order",
         ),
     )

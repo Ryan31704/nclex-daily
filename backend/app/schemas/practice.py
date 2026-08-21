@@ -1,5 +1,6 @@
 import uuid
 from datetime import datetime
+from typing import Any
 
 from pydantic import BaseModel, Field
 
@@ -20,6 +21,8 @@ class PracticeQuestion(BaseModel):
     question_type: str
     topic: TopicReference
     choices: list[AnswerChoiceReview]
+    interaction: dict[str, Any] | None = None
+    case_study_markdown: str | None = None
 
 
 class SessionQuestionResponse(BaseModel):
@@ -44,7 +47,8 @@ class PracticeSessionResponse(BaseModel):
 
 class SubmitAnswerRequest(BaseModel):
     question_id: uuid.UUID
-    answer_choice_id: uuid.UUID
+    answer_choice_id: uuid.UUID | None = None
+    answer: Any | None = None
     response_time_ms: int | None = Field(default=None, ge=0, le=3_600_000)
 
 
@@ -55,7 +59,9 @@ class CorrectAnswerResponse(BaseModel):
 
 class SubmitAnswerResponse(BaseModel):
     is_correct: bool
-    correct_answer: CorrectAnswerResponse
+    correct_answer: CorrectAnswerResponse | None = None
+    correct_response: Any | None = None
+    correct_answer_text: str
     rationale: str | None
     xp_earned: int
     updated_topic_mastery: float
@@ -97,7 +103,7 @@ class ProgressResponse(BaseModel):
 class MissedQuestionResponse(BaseModel):
     attempt_id: uuid.UUID
     attempted_at: datetime
-    selected_answer_id: uuid.UUID
+    selected_answer_id: uuid.UUID | None
     question: PracticeQuestion
 
 

@@ -153,6 +153,7 @@ def submit_practice_answer(
             session_id=session_id,
             question_id=request.question_id,
             answer_choice_id=request.answer_choice_id,
+            answer=request.answer,
             response_time_ms=request.response_time_ms,
         )
     except PracticeNotFound as exc:

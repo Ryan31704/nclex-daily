@@ -160,6 +160,8 @@ def get_missed_questions(
                     )
                     for choice in attempt.question.answer_choices
                 ],
+                interaction=attempt.question.interaction_data,
+                case_study_markdown=attempt.question.case_study_markdown,
             ),
         )
         for attempt in attempts
@@ -176,6 +178,7 @@ def get_dashboard(db: Session, profile: Profile) -> DashboardResponse:
             DailySession.practice_type == "daily",
             DailySession.started_at >= day_start,
             DailySession.started_at < day_start + timedelta(days=1),
+            DailySession.status != "abandoned",
         )
         .order_by(DailySession.started_at.desc())
     )

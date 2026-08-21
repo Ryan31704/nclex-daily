@@ -1,5 +1,7 @@
 import uuid
 import random
+import math
+from typing import Any
 from collections.abc import Callable
 from datetime import UTC, date, datetime, timedelta
 
@@ -82,6 +84,7 @@ class DailyPracticeService:
                 DailySession.practice_type == "daily",
                 DailySession.started_at >= day_start,
                 DailySession.started_at < day_end,
+                DailySession.status != "abandoned",
             )
             .order_by(DailySession.started_at.desc())
         )
@@ -220,7 +223,8 @@ class DailyPracticeService:
         *,
         session_id: uuid.UUID,
         question_id: uuid.UUID,
-        answer_choice_id: uuid.UUID,
+        answer_choice_id: uuid.UUID | None,
+        answer: Any | None = None,
         response_time_ms: int | None,
     ) -> SubmitAnswerResponse:
         session = get_session_for_user(
@@ -252,24 +256,56 @@ class DailyPracticeService:
         ) is not None:
             raise PracticeConflict("This question has already been answered in the session.")
 
-        selected_answer = get_answer_choice(
-            self.db,
-            question_id=question_id,
-            choice_id=answer_choice_id,
+        question = session_question.question
+        submitted_answer = answer if answer is not None else (
+            str(answer_choice_id) if answer_choice_id is not None else None
         )
-        if selected_answer is None:
-            raise PracticeInvalidRequest("Answer choice does not belong to the question.")
-        correct_answer = get_correct_answer(self.db, question_id)
-        if correct_answer is None:
-            raise PracticeInvalidRequest("Question does not have a valid correct answer.")
+        if submitted_answer is None:
+            raise PracticeInvalidRequest("An answer is required.")
+        selected_answer = None
+        correct_answer = None
+        if question.answer_key is None:
+            if answer_choice_id is None:
+                raise PracticeInvalidRequest("An answer choice is required.")
+            selected_answer = get_answer_choice(
+                self.db,
+                question_id=question_id,
+                choice_id=answer_choice_id,
+            )
+            if selected_answer is None:
+                raise PracticeInvalidRequest("Answer choice does not belong to the question.")
+            correct_answer = get_correct_answer(self.db, question_id)
+            if correct_answer is None:
+                raise PracticeInvalidRequest("Question does not have a valid correct answer.")
+            is_correct = selected_answer.id == correct_answer.id
+            correct_response: Any = str(correct_answer.id)
+            correct_answer_text = correct_answer.choice_text
+        else:
+            _validate_choice_response(question, submitted_answer)
+            is_correct = _score_answer(
+                question.question_type, submitted_answer, question.answer_key
+            )
+            correct_response = question.answer_key
+            correct_answer_text = _format_correct_answer(question)
+            if question.question_type == "multiple_choice":
+                selected_answer = get_answer_choice(
+                    self.db,
+                    question_id=question_id,
+                    choice_id=uuid.UUID(str(submitted_answer)),
+                )
+                correct_answer = get_answer_choice(
+                    self.db,
+                    question_id=question_id,
+                    choice_id=uuid.UUID(str(question.answer_key)),
+                )
 
         now = self.clock()
-        is_correct = selected_answer.id == correct_answer.id
         answer_xp = CORRECT_ANSWER_XP if is_correct else INCORRECT_ANSWER_XP
         attempt = Attempt(
             user_id=self.profile.id,
             question_id=question_id,
-            selected_answer_id=selected_answer.id,
+            selected_answer_id=selected_answer.id if selected_answer else None,
+            answer_data=submitted_answer,
             is_correct=is_correct,
             answered_at=now,
             response_time_ms=response_time_ms,
@@ -299,10 +335,16 @@ class DailyPracticeService:
 
         return SubmitAnswerResponse(
             is_correct=is_correct,
-            correct_answer=CorrectAnswerResponse(
-                id=correct_answer.id,
-                choice_text=correct_answer.choice_text,
+            correct_answer=(
+                CorrectAnswerResponse(
+                    id=correct_answer.id,
+                    choice_text=correct_answer.choice_text,
+                )
+                if correct_answer is not None
+                else None
             ),
+            correct_response=correct_response,
+            correct_answer_text=correct_answer_text,
             rationale=session_question.question.rationale,
             xp_earned=answer_xp,
             updated_topic_mastery=progress.mastery_score,
@@ -429,6 +471,8 @@ def serialize_session(session: DailySession) -> PracticeSessionResponse:
                         )
                         for choice in item.question.answer_choices
                     ],
+                    interaction=item.question.interaction_data,
+                    case_study_markdown=item.question.case_study_markdown,
                 ),
             )
             for item in session.session_questions
@@ -451,3 +495,86 @@ def _as_utc(value: datetime) -> datetime:
     if value.tzinfo is None:
         return value.replace(tzinfo=UTC)
     return value.astimezone(UTC)
+
+
+def _validate_choice_response(question: Question, answer: Any) -> None:
+    if question.question_type not in {
+        "multiple_choice",
+        "multiple_response",
+        "ordered_response",
+    }:
+        return
+    values = answer if isinstance(answer, list) else [answer]
+    if not values or len(values) != len(set(map(str, values))):
+        raise PracticeInvalidRequest("Answer choices must be non-empty and unique.")
+    valid_ids = {str(choice.id) for choice in question.answer_choices}
+    if any(str(value) not in valid_ids for value in values):
+        raise PracticeInvalidRequest("Answer choice does not belong to the question.")
+    if question.question_type == "multiple_choice" and len(values) != 1:
+        raise PracticeInvalidRequest("Choose exactly one answer.")
+    if question.question_type == "ordered_response" and len(values) != len(valid_ids):
+        raise PracticeInvalidRequest("Place every answer choice in order before submitting.")
+
+
+def _unordered(value: Any) -> Any:
+    if isinstance(value, dict):
+        return {key: _unordered(item) for key, item in sorted(value.items())}
+    if isinstance(value, list):
+        normalized = [_unordered(item) for item in value]
+        return sorted(normalized, key=lambda item: repr(item))
+    return value
+
+
+def _score_answer(question_type: str, submitted: Any, expected: Any) -> bool:
+    if question_type == "numeric_response":
+        try:
+            submitted_value = float(
+                submitted.get("value") if isinstance(submitted, dict) else submitted
+            )
+            expected_value = float(expected["value"])
+        except (KeyError, TypeError, ValueError):
+            return False
+        return math.isclose(submitted_value, expected_value, rel_tol=0, abs_tol=1e-9)
+    if question_type == "ordered_response":
+        return list(map(str, submitted)) == list(map(str, expected)) if isinstance(submitted, list) else False
+    if question_type == "multiple_choice":
+        return str(submitted) == str(expected)
+    return _unordered(submitted) == _unordered(expected)
+
+
+def _format_correct_answer(question: Question) -> str:
+    choices = {str(choice.id): choice.choice_text for choice in question.answer_choices}
+    key = question.answer_key
+    if question.question_type == "multiple_choice":
+        return choices.get(str(key), "See the rationale below.")
+    if question.question_type == "multiple_response" and isinstance(key, list):
+        return "; ".join(choices.get(str(value), str(value)) for value in key)
+    if question.question_type == "ordered_response" and isinstance(key, list):
+        return " → ".join(choices.get(str(value), str(value)) for value in key)
+    if question.question_type == "numeric_response" and isinstance(key, dict):
+        return f"{key.get('value')} {key.get('unit') or ''}".strip()
+    labels: dict[str, str] = {}
+
+    def collect_labels(value: Any) -> None:
+        if isinstance(value, dict):
+            if value.get("id") and (value.get("text") or value.get("label")):
+                labels[str(value["id"])] = str(value.get("text") or value.get("label"))
+            for nested in value.values():
+                collect_labels(nested)
+        elif isinstance(value, list):
+            for nested in value:
+                collect_labels(nested)
+
+    collect_labels(question.interaction_data)
+
+    def humanize(value: Any) -> str:
+        if isinstance(value, dict):
+            return "; ".join(
+                f"{labels.get(str(name), str(name).replace('_', ' '))}: {humanize(item)}"
+                for name, item in value.items()
+            )
+        if isinstance(value, list):
+            return ", ".join(humanize(item) for item in value)
+        return labels.get(str(value), str(value))
+
+    return humanize(key)

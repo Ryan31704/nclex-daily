@@ -16,6 +16,8 @@ export interface PracticeQuestion {
   question_type: string
   topic: TopicReference
   choices: AnswerChoice[]
+  interaction: Record<string, unknown> | null
+  case_study_markdown: string | null
 }
 
 export interface SessionQuestion {
@@ -43,7 +45,9 @@ export interface SubmitAnswerResponse {
   correct_answer: {
     id: string
     choice_text: string
-  }
+  } | null
+  correct_response: unknown
+  correct_answer_text: string
   rationale: string | null
   xp_earned: number
   updated_topic_mastery: number

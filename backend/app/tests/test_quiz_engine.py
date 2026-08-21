@@ -22,6 +22,7 @@ from app.schemas.auth import AuthenticatedUser
 from app.services.daily_practice_service import (
     DailyPracticeService,
     PracticeConflict,
+    _score_answer,
     apply_utc_streak,
 )
 from app.services.mastery_service import (
@@ -106,6 +107,22 @@ def test_mastery_measures_correct_unique_question_coverage() -> None:
     assert classify_mastery(70) == "strong"
     assert classify_mastery(99.9) == "strong"
     assert classify_mastery(100) == "mastered"
+
+
+def test_alternative_question_answers_are_scored_by_type() -> None:
+    assert _score_answer("multiple_choice", "a", "a") is True
+    assert _score_answer("multiple_response", ["a", "b"], ["b", "a"]) is True
+    assert _score_answer("multiple_response", ["a"], ["a", "b"]) is False
+    assert _score_answer("ordered_response", ["a", "b"], ["a", "b"]) is True
+    assert _score_answer("ordered_response", ["b", "a"], ["a", "b"]) is False
+    assert _score_answer(
+        "numeric_response", "89.1", {"value": 89.1, "unit": "mg"}
+    ) is True
+    assert _score_answer(
+        "matrix",
+        {"rows": {"r1": ["c1", "c2"]}},
+        {"rows": {"r1": ["c2", "c1"]}},
+    ) is True
 
 
 def test_daily_selection_uses_weak_developing_strong_unseen_mix(
