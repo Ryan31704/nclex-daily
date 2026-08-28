@@ -150,6 +150,7 @@ Backend variables are documented in `backend/.env.example`:
 Frontend variables are documented in `frontend/.env.example`:
 
 - `VITE_API_URL`: public backend origin, without a trailing slash
+- `VITE_ALLOW_SIGNUPS`: `false` for the invite-only private beta; `true` for local signup testing
 - `VITE_SUPABASE_URL`: the same public Supabase project URL
 - `VITE_SUPABASE_PUBLISHABLE_KEY`: the same low-privilege publishable key
 
@@ -189,14 +190,15 @@ npm run build
 3. Obtain the project URL from the project's **Connect** dialog or **Integrations → Data API**. It has the form `https://<project-ref>.supabase.co`.
 4. Open **Authentication → Sign In / Providers → Email**:
    - Enable the Email provider.
-   - Keep **Allow new users to sign up** enabled.
+   - Keep **Allow new users to sign up** enabled for local signup testing.
+   - Disable it for the hosted private beta and invite testers from **Authentication → Users → Add User → Send invitation**.
    - For the production-like flow, keep **Confirm Email** enabled. You may disable it temporarily for faster local-only testing.
 5. Open **Authentication → URL Configuration**:
    - Set **Site URL** to `http://localhost:5173` for local development.
    - Add `http://localhost:5173/**` to **Redirect URLs**.
    - When deployed, change Site URL to the production frontend URL and add the exact production callback pattern, for example `https://your-app.vercel.app/**`.
 6. Put the project URL and publishable key in both `.env` files using the names in the examples. Both values are intentionally public; never substitute a secret key.
-7. Keep the local Docker `DATABASE_URL` while developing, or click **Connect** in Supabase and copy the **Session pooler** connection string for a persistent Railway/Render backend. Change its scheme to `postgresql+psycopg://` and URL-encode special characters in the password.
+7. Keep the local Docker `DATABASE_URL` while developing. For Vercel, click **Connect**, choose the **Transaction pooler**, change its scheme to `postgresql+psycopg://`, and URL-encode special characters in the password. Use a direct connection for migrations when the local network supports IPv6; otherwise use the Session pooler for that one-time administration task.
 
 Supabase hosted projects enable email confirmation by default. The built-in mailer is intended for testing and is rate limited; configure custom SMTP before production use.
 
@@ -213,13 +215,121 @@ Supabase hosted projects enable email confirmation by default. The built-in mail
 
 Calling Supabase Auth for token validation adds one regional network request to protected API calls, but it supports both current asymmetric signing keys and legacy HS256 projects without handling a signing secret. A later optimization can replace this service behind the same dependency with cached JWKS validation.
 
-## Deployment direction
+## Hosted private beta on Vercel
 
-- Frontend: Vercel, with `VITE_API_URL` set to the deployed FastAPI origin.
-- Backend: Railway or Render, with `DATABASE_URL`, `CORS_ORIGINS`, and later Supabase JWT verification variables configured as secrets.
-- Database: Supabase Postgres in production.
+The beta uses two Vercel projects connected to this one private GitHub repository:
 
-Exact deployment and production-hardening instructions will be completed in Phase 6.
+- `nclex-daily-api`, with **Root Directory** set to `backend`
+- `nclex-daily`, with **Root Directory** set to `frontend`
+- Supabase continues to provide Auth and the production Postgres database
+
+The backend exports a recognized FastAPI entrypoint in `backend/app.py`. The
+frontend already includes its SPA rewrite in `frontend/vercel.json`. Keep the
+projects separate so each has its own build settings, URL, and environment
+variables.
+
+### 1. Prepare the production database
+
+In Supabase, click **Connect** and copy two PostgreSQL connection strings:
+
+- **Direct connection** for migrations/imports, or **Session pooler** if the local machine cannot use the IPv6 direct endpoint
+- **Transaction pooler** for the Vercel backend runtime
+
+For both URLs, replace the `postgresql://` or `postgres://` scheme with
+`postgresql+psycopg://`, insert the database password, and URL-encode any special
+characters in that password. Do not commit either URL.
+
+From PowerShell, prepare the empty hosted database with the administration URL:
+
+```powershell
+cd backend
+$env:DATABASE_URL = '<direct-or-session-pooler-sqlalchemy-url>'
+.\.venv\Scripts\python.exe -m alembic upgrade head
+.\.venv\Scripts\python.exe -m app.scripts.import_question_json `
+  ..\data\nclex_generated_3x_alternative_question_bank.json `
+  --apply --activate
+Remove-Item Env:DATABASE_URL
+```
+
+Run that import only against the intended hosted database. It is idempotent, but
+the `--activate` option switches the active question set and abandons incomplete
+sessions from any previous bank.
+
+### 2. Create the backend Vercel project
+
+1. In Vercel, select **Add New → Project** and import the private
+   `Ryan31704/nclex-daily` GitHub repository.
+2. Name it `nclex-daily-api` and set **Root Directory** to `backend`.
+3. Leave Framework Preset and build/output commands on their automatic defaults.
+4. Add these **Production, Preview, and Development** environment variables:
+
+   ```text
+   APP_NAME=NCLEX Daily API
+   APP_ENV=production
+   LOG_LEVEL=INFO
+   DATABASE_URL=<Supabase Transaction pooler URL using postgresql+psycopg://>
+   DATABASE_SERVERLESS=true
+   CORS_ORIGINS=https://<frontend-project>.vercel.app
+   SUPABASE_URL=https://<project-ref>.supabase.co
+   SUPABASE_PUBLISHABLE_KEY=sb_publishable_...
+   ```
+
+5. Deploy and verify `https://<backend-project>.vercel.app/api/v1/health` returns
+   JSON with `status: ok`. An unauthenticated request to `/api/v1/me` must return
+   `401`.
+
+### 3. Create the frontend Vercel project
+
+1. Import the same repository again as a second project.
+2. Name it `nclex-daily`, set **Root Directory** to `frontend`, and confirm Vercel
+   detects Vite.
+3. Add these **Production, Preview, and Development** environment variables:
+
+   ```text
+   VITE_API_URL=https://<backend-project>.vercel.app
+   VITE_ALLOW_SIGNUPS=false
+   VITE_SUPABASE_URL=https://<project-ref>.supabase.co
+   VITE_SUPABASE_PUBLISHABLE_KEY=sb_publishable_...
+   ```
+
+4. Deploy. Return to the backend project and replace `CORS_ORIGINS` with the exact
+   frontend deployment origin if its final name differs, then redeploy the backend.
+
+### 4. Lock the beta to invited testers
+
+1. In **Supabase → Authentication → URL Configuration**, set **Site URL** to the
+   production frontend URL and add `https://<frontend-project>.vercel.app/**` to
+   **Redirect URLs**. Keep the localhost redirect for development.
+2. In the Email provider settings, disable **Allow new users to sign up**.
+3. Add each tester through **Authentication → Users → Add User → Send invitation**.
+4. Keep `VITE_ALLOW_SIGNUPS=false`. This removes account creation from the app,
+   while the Supabase setting is the server-enforced signup block.
+5. Optionally enable Vercel Authentication for preview deployments. The production
+   beta itself is gated by Supabase login so invited testers do not need Vercel
+   accounts.
+
+### 5. Release and rollback
+
+Every push to `main` triggers CI plus deployments for both connected projects.
+Use a Vercel preview deployment first for meaningful changes, complete the beta
+checklist below, and only then promote it to production. Vercel retains earlier
+deployments for rollback. Database migrations are a separate, explicit release
+step and must be applied before code that depends on them.
+
+Private-beta checklist:
+
+1. Open the production URL in a private browser window; confirm account creation
+   is absent and `/dashboard` redirects to `/login`.
+2. Send an invitation to a test email and follow its link.
+3. Log in, refresh `/dashboard`, and confirm the session persists.
+4. Complete one practice question and one 10-question Quick Review; confirm answer
+   feedback, progress, and XP persist after refresh.
+5. Start a Random Test and confirm the requested question count loads.
+6. Confirm `/api/v1/me` returns `200` with the browser's access token and `401`
+   without it.
+7. Log out and confirm protected pages return to `/login`.
+8. Install the PWA from the HTTPS production URL on a phone and repeat login plus
+   one practice question on cellular data.
 
 ## Question bank import
 
@@ -430,7 +540,7 @@ The cached shell can launch offline, but authentication refreshes, loading quest
 
 ## Current MVP limitations
 
-Phase 5 includes the responsive dashboard, progress, topic, practice, answer-feedback, completion, review, and profile interfaces. Rationales and difficulty review for the imported private bank remain content tasks. Phase 6 will perform the production security/index review and finalize deployment configuration and instructions.
+Phase 5 includes the responsive dashboard, progress, topic, practice, answer-feedback, completion, review, and profile interfaces. The repository is configured for an invite-only Vercel beta. Rationales, difficulty review, clinical accuracy review, and distribution rights for the imported private bank remain content tasks and still block a public launch.
 
 ## Phase 2 manual test checklist
 

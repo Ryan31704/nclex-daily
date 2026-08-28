@@ -1,7 +1,7 @@
 import { useState, type FormEvent } from 'react'
 import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 
-import { authConfigError } from '../api/supabase'
+import { allowSignups, authConfigError } from '../api/supabase'
 import { useAuth } from '../features/auth/useAuth'
 
 type AuthMode = 'login' | 'signup'
@@ -25,7 +25,8 @@ function readableAuthError(message: string): string {
 
 export function LoginPage() {
   const [searchParams] = useSearchParams()
-  const initialMode: AuthMode = searchParams.get('mode') === 'signup' ? 'signup' : 'login'
+  const initialMode: AuthMode =
+    allowSignups && searchParams.get('mode') === 'signup' ? 'signup' : 'login'
   const [mode, setMode] = useState<AuthMode>(initialMode)
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -117,26 +118,33 @@ export function LoginPage() {
             NCLEX <span className="text-teal-600">Daily</span>
           </Link>
 
-          <div
-            className="mt-9 flex rounded-2xl bg-slate-100 p-1"
-            aria-label="Authentication mode"
-            role="group"
-          >
-            {(['login', 'signup'] as const).map((item) => (
-              <button
-                key={item}
-                className={`min-h-11 flex-1 rounded-xl px-4 font-semibold transition ${
-                  mode === item
-                    ? 'bg-white text-ink shadow-sm'
-                    : 'text-slate-500 hover:text-ink'
-                }`}
-                onClick={() => switchMode(item)}
-                type="button"
-              >
-                {item === 'login' ? 'Log In' : 'Create Account'}
-              </button>
-            ))}
-          </div>
+          {allowSignups ? (
+            <div
+              className="mt-9 flex rounded-2xl bg-slate-100 p-1"
+              aria-label="Authentication mode"
+              role="group"
+            >
+              {(['login', 'signup'] as const).map((item) => (
+                <button
+                  key={item}
+                  className={`min-h-11 flex-1 rounded-xl px-4 font-semibold transition ${
+                    mode === item
+                      ? 'bg-white text-ink shadow-sm'
+                      : 'text-slate-500 hover:text-ink'
+                  }`}
+                  onClick={() => switchMode(item)}
+                  type="button"
+                >
+                  {item === 'login' ? 'Log In' : 'Create Account'}
+                </button>
+              ))}
+            </div>
+          ) : (
+            <p className="mt-9 rounded-2xl border border-teal-200 bg-teal-50 p-4 text-sm leading-6 text-teal-900">
+              NCLEX Daily is currently an invite-only private beta. Log in with
+              the email address that received your invitation.
+            </p>
+          )}
 
           <h1 className="mt-8 text-3xl font-bold tracking-tight text-ink sm:mt-9 sm:text-4xl">
             {mode === 'login' ? 'Welcome back' : 'Start your study streak'}

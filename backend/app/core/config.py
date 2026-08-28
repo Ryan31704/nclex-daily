@@ -11,6 +11,7 @@ class Settings(BaseSettings):
     database_url: str = (
         "postgresql+psycopg://nclex:nclex_local_password@localhost:5432/nclex_daily"
     )
+    database_serverless: bool = False
     cors_origins: str = "http://localhost:5173"
     supabase_url: str | None = None
     supabase_publishable_key: str | None = None

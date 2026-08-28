@@ -1,5 +1,7 @@
 import { Link } from 'react-router-dom'
 
+import { allowSignups } from '../api/supabase'
+
 export function LandingPage() {
   return (
     <main className="relative isolate min-h-screen overflow-hidden bg-canvas px-5 py-6 sm:px-8">
@@ -39,9 +41,9 @@ export function LandingPage() {
           <div className="mt-9 flex flex-col gap-3 sm:flex-row">
             <Link
               className="inline-flex min-h-12 items-center justify-center rounded-2xl bg-teal-600 px-7 py-3 font-bold text-white shadow-lg shadow-teal-600/20 transition hover:bg-teal-700"
-              to="/login?mode=signup"
+              to={allowSignups ? '/login?mode=signup' : '/login'}
             >
-              Start Studying
+              {allowSignups ? 'Start Studying' : 'Private Beta Log In'}
             </Link>
             <Link
               className="inline-flex min-h-12 items-center justify-center rounded-2xl border border-slate-200 bg-white px-7 py-3 font-bold text-ink transition hover:border-teal-500"
