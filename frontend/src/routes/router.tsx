@@ -1,15 +1,25 @@
 import { createBrowserRouter } from 'react-router-dom'
 
 import { AppShell } from '../components/AppShell'
-import { GuestOnlyRoute, ProtectedRoute } from '../features/auth/RouteGuards'
+import {
+  GuestOnlyRoute,
+  LandingRoute,
+  PasswordSetupRoute,
+  ProtectedRoute,
+} from '../features/auth/RouteGuards'
 import { LandingPage } from '../pages/LandingPage'
 import { LoginPage } from '../pages/LoginPage'
 import { NotFoundPage } from '../pages/NotFoundPage'
 
 export const router = createBrowserRouter([
   {
-    path: '/',
-    element: <LandingPage />,
+    element: <LandingRoute />,
+    children: [
+      {
+        path: '/',
+        element: <LandingPage />,
+      },
+    ],
   },
   {
     element: <GuestOnlyRoute />,
@@ -17,6 +27,18 @@ export const router = createBrowserRouter([
       {
         path: '/login',
         element: <LoginPage />,
+      },
+    ],
+  },
+  {
+    element: <PasswordSetupRoute />,
+    children: [
+      {
+        path: '/set-password',
+        lazy: async () => {
+          const { SetPasswordPage } = await import('../pages/SetPasswordPage')
+          return { Component: SetPasswordPage }
+        },
       },
     ],
   },

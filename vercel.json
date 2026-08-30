@@ -20,7 +20,7 @@
       }
     },
     {
-      "source": "/(login|dashboard|progress|review|profile)",
+      "source": "/(login|set-password|dashboard|progress|review|profile)",
       "destination": "/index.html"
     },
     {

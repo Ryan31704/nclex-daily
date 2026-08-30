@@ -191,7 +191,7 @@ npm run build
 4. Open **Authentication → Sign In / Providers → Email**:
    - Enable the Email provider.
    - Keep **Allow new users to sign up** enabled for local signup testing.
-   - Disable it for the hosted private beta and invite testers from **Authentication → Users → Add User → Send invitation**.
+   - Disable it for the hosted private beta and invite testers from **Authentication → Users → Add User → Send invitation**. Do not create or share a temporary password.
    - For the production-like flow, keep **Confirm Email** enabled. You may disable it temporarily for faster local-only testing.
 5. Open **Authentication → URL Configuration**:
    - Set **Site URL** to `http://localhost:5173` for local development.
@@ -205,6 +205,8 @@ Supabase hosted projects enable email confirmation by default. The built-in mail
 ### Authentication behavior
 
 - Supabase JS persists and refreshes the browser session.
+- Invitation links open the app's `/set-password` flow. The tester chooses and
+  confirms their own password before entering the protected application.
 - `/dashboard` is protected and redirects anonymous visitors to `/login`.
 - `/login` redirects authenticated visitors to `/dashboard`.
 - The dashboard sends the Supabase access token as `Authorization: Bearer <token>` to `/api/v1/me`.
@@ -291,6 +293,9 @@ sessions from any previous bank.
    **Redirect URLs**. Keep the localhost redirect for development.
 2. In the Email provider settings, disable **Allow new users to sign up**.
 3. Add each tester through **Authentication → Users → Add User → Send invitation**.
+   The tester must open the link in that email instead of attempting to log in
+   immediately. The link signs them in once, sends them to **Create your password**,
+   and then opens the dashboard after the password is saved.
 4. Keep `VITE_ALLOW_SIGNUPS=false`. This removes account creation from the app,
    while the Supabase setting is the server-enforced signup block.
 5. Optionally enable Vercel Authentication for preview deployments. The production
@@ -309,8 +314,10 @@ Private-beta checklist:
 
 1. Open the production URL in a private browser window; confirm account creation
    is absent and `/dashboard` redirects to `/login`.
-2. Send an invitation to a test email and follow its link.
-3. Log in, refresh `/dashboard`, and confirm the session persists.
+2. Send an invitation to a test email and follow its link. Confirm the app asks
+   the tester to create and confirm a password before showing the dashboard.
+3. Log out, log back in with the new password, refresh `/dashboard`, and confirm
+   the session persists.
 4. Complete one practice question and one 10-question Quick Review; confirm answer
    feedback, progress, and XP persist after refresh.
 5. Start a Random Test and confirm the requested question count loads.
@@ -541,6 +548,22 @@ Phase 5 includes the responsive dashboard, progress, topic, practice, answer-fee
 6. Select **Log Out** and confirm the app returns to `/login`.
 7. While logged out, visit `/dashboard` directly and confirm it redirects to `/login`.
 8. In browser developer tools, call or inspect `GET http://localhost:8000/api/v1/me` with no bearer token and confirm it returns `401`; the dashboard's authenticated request should return `200`.
+
+## Private-beta invitation test checklist
+
+1. Keep public signups disabled in both Supabase and `VITE_ALLOW_SIGNUPS`.
+2. In **Supabase → Authentication → Users**, select **Add user → Send invitation**
+   and enter a fresh test email address.
+3. Confirm entering that email directly on `/login` does not grant access before
+   the invitation is accepted.
+4. Open the invitation email and follow its link. The app must show
+   **Create your password**, not the dashboard or login error.
+5. Try mismatched passwords and a password shorter than eight characters; confirm
+   both are rejected with a useful message.
+6. Save a valid password and confirm the dashboard opens.
+7. Log out, then log in again using the invited email and newly created password.
+8. Reopen the already-used invitation link and confirm it cannot create another
+   account or bypass authentication.
 
 ## Content Licensing
 
