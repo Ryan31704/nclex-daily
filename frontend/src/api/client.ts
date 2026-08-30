@@ -1,7 +1,4 @@
-const apiUrl = (import.meta.env.VITE_API_URL ?? 'http://localhost:8000').replace(
-  /\/$/,
-  '',
-)
+const apiUrl = (import.meta.env.VITE_API_URL ?? '').trim().replace(/\/$/, '')
 
 export class ApiError extends Error {
   constructor(

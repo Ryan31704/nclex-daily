@@ -217,16 +217,17 @@ Calling Supabase Auth for token validation adds one regional network request to 
 
 ## Hosted private beta on Vercel
 
-The beta uses two Vercel projects connected to this one private GitHub repository:
+The beta uses one Vercel Services project connected to this private GitHub
+repository:
 
-- `nclex-daily-api`, with **Root Directory** set to `backend`
-- `nclex-daily`, with **Root Directory** set to `frontend`
+- `frontend` is a Vite service mounted at `/`
+- `backend` is a FastAPI service receiving `/api/*`
 - Supabase continues to provide Auth and the production Postgres database
 
-The backend exports a recognized FastAPI entrypoint in `backend/app.py`. The
-frontend already includes its SPA rewrite in `frontend/vercel.json`. Keep the
-projects separate so each has its own build settings, URL, and environment
-variables.
+The root `vercel.json` defines both services and routes them through one domain.
+The frontend therefore uses a same-origin API URL, avoiding a separate public API
+hostname and cross-origin browser requests. The backend exports a recognized
+FastAPI entrypoint in `backend/app.py`.
 
 ### 1. Prepare the production database
 
@@ -255,12 +256,14 @@ Run that import only against the intended hosted database. It is idempotent, but
 the `--activate` option switches the active question set and abandons incomplete
 sessions from any previous bank.
 
-### 2. Create the backend Vercel project
+### 2. Create the Vercel Services project
 
 1. In Vercel, select **Add New → Project** and import the private
    `Ryan31704/nclex-daily` GitHub repository.
-2. Name it `nclex-daily-api` and set **Root Directory** to `backend`.
-3. Leave Framework Preset and build/output commands on their automatic defaults.
+2. Name it `nclex-daily`, leave **Root Directory** at the repository root, and
+   select the **Services** application preset. Vercel will read the root
+   `vercel.json` and detect the Vite and FastAPI services.
+3. Leave build/output commands on their automatic defaults.
 4. Add these **Production, Preview, and Development** environment variables:
 
    ```text
@@ -269,33 +272,19 @@ sessions from any previous bank.
    LOG_LEVEL=INFO
    DATABASE_URL=<Supabase Transaction pooler URL using postgresql+psycopg://>
    DATABASE_SERVERLESS=true
-   CORS_ORIGINS=https://<frontend-project>.vercel.app
+   CORS_ORIGINS=https://<project>.vercel.app
    SUPABASE_URL=https://<project-ref>.supabase.co
    SUPABASE_PUBLISHABLE_KEY=sb_publishable_...
-   ```
-
-5. Deploy and verify `https://<backend-project>.vercel.app/api/v1/health` returns
-   JSON with `status: ok`. An unauthenticated request to `/api/v1/me` must return
-   `401`.
-
-### 3. Create the frontend Vercel project
-
-1. Import the same repository again as a second project.
-2. Name it `nclex-daily`, set **Root Directory** to `frontend`, and confirm Vercel
-   detects Vite.
-3. Add these **Production, Preview, and Development** environment variables:
-
-   ```text
-   VITE_API_URL=https://<backend-project>.vercel.app
+   VITE_API_URL=
    VITE_ALLOW_SIGNUPS=false
    VITE_SUPABASE_URL=https://<project-ref>.supabase.co
    VITE_SUPABASE_PUBLISHABLE_KEY=sb_publishable_...
    ```
 
-4. Deploy. Return to the backend project and replace `CORS_ORIGINS` with the exact
-   frontend deployment origin if its final name differs, then redeploy the backend.
+5. Deploy and verify `https://<project>.vercel.app/api/v1/health` returns JSON
+   with `status: ok`. An unauthenticated request to `/api/v1/me` must return `401`.
 
-### 4. Lock the beta to invited testers
+### 3. Lock the beta to invited testers
 
 1. In **Supabase → Authentication → URL Configuration**, set **Site URL** to the
    production frontend URL and add `https://<frontend-project>.vercel.app/**` to
@@ -308,9 +297,9 @@ sessions from any previous bank.
    beta itself is gated by Supabase login so invited testers do not need Vercel
    accounts.
 
-### 5. Release and rollback
+### 4. Release and rollback
 
-Every push to `main` triggers CI plus deployments for both connected projects.
+Every push to `main` triggers CI plus one atomic Services deployment.
 Use a Vercel preview deployment first for meaningful changes, complete the beta
 checklist below, and only then promote it to production. Vercel retains earlier
 deployments for rollback. Database migrations are a separate, explicit release
