@@ -24,7 +24,7 @@
       "destination": {
         "type": "service",
         "service": "frontend",
-        "path": "/index.html"
+        "path": "/"
       }
     },
     {
@@ -32,7 +32,7 @@
       "destination": {
         "type": "service",
         "service": "frontend",
-        "path": "/index.html"
+        "path": "/"
       }
     },
     {
@@ -40,7 +40,7 @@
       "destination": {
         "type": "service",
         "service": "frontend",
-        "path": "/index.html"
+        "path": "/"
       }
     },
     {
