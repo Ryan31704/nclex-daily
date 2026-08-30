@@ -227,7 +227,7 @@ repository:
 The root `vercel.json` defines both services and routes them through one domain.
 The frontend therefore uses a same-origin API URL, avoiding a separate public API
 hostname and cross-origin browser requests. The backend exports a recognized
-FastAPI entrypoint in `backend/app.py`.
+FastAPI entrypoint in `backend/main.py`.
 
 ### 1. Prepare the production database
 

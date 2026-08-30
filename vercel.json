@@ -1,4 +1,5 @@
 {
+  "$schema": "https://openapi.vercel.sh/vercel.json",
   "services": {
     "frontend": {
       "root": "frontend",
@@ -6,7 +7,8 @@
     },
     "backend": {
       "root": "backend",
-      "framework": "fastapi"
+      "framework": "fastapi",
+      "entrypoint": "main:app"
     }
   },
   "rewrites": [
@@ -15,6 +17,30 @@
       "destination": {
         "type": "service",
         "service": "backend"
+      }
+    },
+    {
+      "source": "/(login|dashboard|progress|review|profile)",
+      "destination": {
+        "type": "service",
+        "service": "frontend",
+        "path": "/index.html"
+      }
+    },
+    {
+      "source": "/topics(/.*)?",
+      "destination": {
+        "type": "service",
+        "service": "frontend",
+        "path": "/index.html"
+      }
+    },
+    {
+      "source": "/practice(/.*)?",
+      "destination": {
+        "type": "service",
+        "service": "frontend",
+        "path": "/index.html"
       }
     },
     {
