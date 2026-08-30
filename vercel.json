@@ -21,27 +21,15 @@
     },
     {
       "source": "/(login|dashboard|progress|review|profile)",
-      "destination": {
-        "type": "service",
-        "service": "frontend",
-        "path": "/"
-      }
+      "destination": "/index.html"
     },
     {
       "source": "/topics(/.*)?",
-      "destination": {
-        "type": "service",
-        "service": "frontend",
-        "path": "/"
-      }
+      "destination": "/index.html"
     },
     {
       "source": "/practice(/.*)?",
-      "destination": {
-        "type": "service",
-        "service": "frontend",
-        "path": "/"
-      }
+      "destination": "/index.html"
     },
     {
       "source": "/(.*)",
