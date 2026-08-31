@@ -226,6 +226,12 @@ export function LoginPage() {
                   ? 'Log In'
                   : 'Create Account'}
             </button>
+            {mode === 'login' ? (
+              <p className="text-center text-xs leading-5 text-slate-500">
+                You will stay signed in on this device unless you log out or clear
+                the app’s website data.
+              </p>
+            ) : null}
           </form>
         </div>
       </section>

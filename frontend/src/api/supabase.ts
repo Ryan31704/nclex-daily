@@ -3,6 +3,7 @@ import { createClient } from '@supabase/supabase-js'
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL
 const supabasePublishableKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY
 const inviteSetupStorageKey = 'nclex-daily:invite-password-setup'
+let persistentStorageRequest: Promise<boolean> | null = null
 
 function isInviteCallback(): boolean {
   if (typeof window === 'undefined') {
@@ -34,6 +35,27 @@ export function clearInviteSetupPending(): void {
   if (typeof window !== 'undefined') {
     window.sessionStorage.removeItem(inviteSetupStorageKey)
   }
+}
+
+export function requestPersistentStorage(): Promise<boolean> {
+  if (
+    typeof navigator === 'undefined' ||
+    !navigator.storage?.persisted ||
+    !navigator.storage.persist
+  ) {
+    return Promise.resolve(false)
+  }
+
+  if (!persistentStorageRequest) {
+    persistentStorageRequest = navigator.storage
+      .persisted()
+      .then((isPersistent) =>
+        isPersistent ? true : navigator.storage.persist(),
+      )
+      .catch(() => false)
+  }
+
+  return persistentStorageRequest
 }
 
 export const allowSignups = import.meta.env.VITE_ALLOW_SIGNUPS !== 'false'

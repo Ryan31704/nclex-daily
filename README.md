@@ -205,6 +205,8 @@ Supabase hosted projects enable email confirmation by default. The built-in mail
 ### Authentication behavior
 
 - Supabase JS persists and refreshes the browser session.
+- After authentication, the app requests persistent browser storage and rechecks
+  the saved session whenever an installed PWA resumes from the background.
 - Invitation links open the app's `/set-password` flow. The tester chooses and
   confirms their own password before entering the protected application.
 - `/dashboard` is protected and redirects anonymous visitors to `/login`.
@@ -530,6 +532,9 @@ The frontend is an installable progressive web app. Production builds generate a
 
 - Android/desktop Chrome: use the in-app **Install app** prompt or the browser install button.
 - iPhone/iPad Safari: tap **Share**, then **Add to Home Screen**.
+- On iPhone/iPad, Safari and the installed Home Screen app keep separate website
+  data. Complete the invitation, open the installed app, and log in there once.
+  Subsequent launches should restore that installed app's saved session.
 - The standalone layout respects notches and home indicators, uses a thumb-friendly bottom navigation, maintains 44px-or-larger controls, and has no horizontal overflow down to 320px.
 
 The cached shell can launch offline, but authentication refreshes, loading questions, submitting answers, and synchronizing progress still require an internet connection.

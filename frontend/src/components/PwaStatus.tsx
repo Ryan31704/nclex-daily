@@ -106,7 +106,7 @@ export function PwaStatus() {
               <p className="mt-1 text-sm leading-5 text-slate-500">
                 {installPrompt
                   ? 'Add it to your home screen for a focused, full-screen experience.'
-                  : 'On iPhone or iPad, tap Share, then Add to Home Screen.'}
+                  : 'On iPhone or iPad, tap Share, then Add to Home Screen. Sign in once from the installed app.'}
               </p>
             </div>
           </div>

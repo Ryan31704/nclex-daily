@@ -5,6 +5,7 @@ import {
   clearInviteSetupPending,
   isInviteSetupPending,
   markInviteSetupPending,
+  requestPersistentStorage,
   supabase,
 } from '../../api/supabase'
 import { AuthContext, type AuthContextValue } from './auth-context'
@@ -28,22 +29,50 @@ export function AuthProvider({ children }: AuthProviderProps) {
       return undefined
     }
 
+    const authClient = supabase
     let active = true
+    let sessionSyncPromise: Promise<void> | null = null
+    const syncStoredSession = () => {
+      if (!sessionSyncPromise) {
+        sessionSyncPromise = authClient.auth
+          .getSession()
+          .then(({ data }) => {
+            if (active) {
+              setSession(data.session)
+              if (data.session) {
+                void requestPersistentStorage()
+              }
+            }
+          })
+          .finally(() => {
+            sessionSyncPromise = null
+          })
+        }
+      return sessionSyncPromise
+    }
+    const handlePageShow = () => {
+      void syncStoredSession()
+    }
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        void syncStoredSession()
+      }
+    }
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, nextSession) => {
+    } = authClient.auth.onAuthStateChange((_event, nextSession) => {
       if (active) {
         setSession(nextSession)
+        if (nextSession) {
+          void requestPersistentStorage()
+        }
       }
     })
 
-    void supabase.auth
-      .getSession()
-      .then(({ data }) => {
-        if (active) {
-          setSession(data.session)
-        }
-      })
+    window.addEventListener('pageshow', handlePageShow)
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+
+    void syncStoredSession()
       .finally(() => {
         if (active) {
           setLoading(false)
@@ -52,6 +81,8 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
     return () => {
       active = false
+      window.removeEventListener('pageshow', handlePageShow)
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
       subscription.unsubscribe()
     }
   }, [])
